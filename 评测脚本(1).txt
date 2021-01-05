@@ -1,0 +1,42 @@
+cd WORKSPACE
+cp -r WORKSPACE/SparkGraphX/data/. /root/data 2>&1 >/dev/null
+
+CompilePath=("SparkGraphX/" "SparkGraphX/" "SparkGraphX/")
+ExecutePath=("WORKSPACE/SparkGraphX/target/*.jar" "WORKSPACE/SparkGraphX/target/*.jar" "WORKSPACE/SparkGraphX/target/*.jar")
+ClassName=("connectComponents" "predict1_s" "predict2_s")
+input=$2;OLD_IFS="$IFS"; IFS=,; ins=($input);IFS="$OLD_IFS"
+echo 'ulimit -f 1000000' >>/root/.bashrc  ; source /root/.bashrc
+
+compile(){
+        CompilePath_Now=${CompilePath[$1 - 1]}
+        cd $CompilePath_Now
+        compileCommand="mvn package"
+        rm -f ./target/*.jar 2>&1 >/dev/null
+        compileResult=$($compileCommand 2>&1 | base64)
+        if [ -f ./target/*.jar ]; then
+                compileResult=$(echo -n "compile successfully" | base64)
+        fi
+
+}
+compile $1
+
+execute(){
+ 		ExecutePath_Now=${ExecutePath[$1 - 1]}
+		ClassName_Now=${ClassName[$1 - 1]}
+		executeCommand="spark-submit --class $ClassName_Now $ExecutePath_Now"
+        output=''
+        i=0
+        while [[ i -lt ${#ins[*]} ]]; do
+            result=$(echo "${ins[$i]}" | base64 -d | $executeCommand  2>&1 |sed '/Stage/d'|sed -n 6,50p | base64)
+            output=$output\"$result\",
+            let i++
+        done
+        output="[${output%?}]"
+}
+execute $1
+
+returnResult(){
+        result="{\"compileResult\":\"$compileResult\",\"out\":$output}"
+        echo $result
+}
+returnResult
